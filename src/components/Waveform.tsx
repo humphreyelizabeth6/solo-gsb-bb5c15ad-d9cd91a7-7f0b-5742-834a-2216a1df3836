@@ -11,6 +11,8 @@ const MAX_ZOOM = 800;
 interface WaveformProps {
   peaks: Peaks;
   chapters: Chapter[];
+  /** silence-split candidate points (seconds), preview only */
+  suggestions: number[];
   selectedId: string | null;
   playhead: number;
   pxPerSec: number;
@@ -38,7 +40,7 @@ function niceStep(pxPerSec: number): number {
 }
 
 export function Waveform(props: WaveformProps) {
-  const { peaks, chapters, selectedId, playhead, pxPerSec, follow } = props;
+  const { peaks, chapters, suggestions, selectedId, playhead, pxPerSec, follow } = props;
   const scrollRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [viewportW, setViewportW] = useState(800);
@@ -293,6 +295,31 @@ export function Waveform(props: WaveformProps) {
       }
     }
 
+    // silence-split suggestions: dashed amber markers, distinct from chapters
+    if (suggestions.length > 0) {
+      ctx.strokeStyle = '#f0a35e';
+      ctx.fillStyle = '#f0a35e';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      for (const t of suggestions) {
+        const x = t * pxPerSec - scrollLeft;
+        if (x < -6 || x > w + 6) continue;
+        ctx.beginPath();
+        ctx.moveTo(x, waveTop);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+        // diamond flag just under the ruler
+        ctx.beginPath();
+        ctx.moveTo(x, waveTop + 2);
+        ctx.lineTo(x + 5, waveTop + 7);
+        ctx.lineTo(x, waveTop + 12);
+        ctx.lineTo(x - 5, waveTop + 7);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.setLineDash([]);
+    }
+
     // ruler
     ctx.fillStyle = '#0b0e11';
     ctx.fillRect(0, 0, w, RULER_H);
@@ -333,7 +360,7 @@ export function Waveform(props: WaveformProps) {
       ctx.closePath();
       ctx.fill();
     }
-  }, [peaks, chapters, selectedId, playhead, pxPerSec, scrollLeft, viewportW, drag, duration]);
+  }, [peaks, chapters, suggestions, selectedId, playhead, pxPerSec, scrollLeft, viewportW, drag, duration]);
 
   return (
     <div

@@ -142,6 +142,74 @@ export function createChapterInGap(
   return { start, end };
 }
 
+/** Free intervals not covered by any chapter, in time order. */
+export function freeGaps(
+  chapters: Chapter[],
+  duration: number,
+): { start: number; end: number }[] {
+  const gaps: { start: number; end: number }[] = [];
+  let cursor = 0;
+  for (const c of sorted(chapters)) {
+    if (c.start > cursor + 1e-9) gaps.push({ start: cursor, end: c.start });
+    cursor = Math.max(cursor, c.end);
+  }
+  if (cursor < duration - 1e-9) gaps.push({ start: cursor, end: duration });
+  return gaps;
+}
+
+/**
+ * Keep only split points that lie inside free gaps (not covered by any
+ * chapter) and that would not produce a chapter shorter than
+ * MIN_CHAPTER_DURATION: points too close to a gap edge or to a previously
+ * kept point are dropped (the earliest point wins).
+ */
+export function filterSplitPoints(
+  points: number[],
+  chapters: Chapter[],
+  duration: number,
+): number[] {
+  const ordered = [...points].sort((a, b) => a - b);
+  const kept: number[] = [];
+  for (const gap of freeGaps(chapters, duration)) {
+    let last = -Infinity;
+    for (const p of ordered) {
+      if (p < gap.start + MIN_CHAPTER_DURATION - 1e-9) continue;
+      if (p > gap.end - MIN_CHAPTER_DURATION + 1e-9) continue;
+      if (p - last < MIN_CHAPTER_DURATION - 1e-9) continue;
+      kept.push(p);
+      last = p;
+    }
+  }
+  return kept;
+}
+
+/**
+ * Chapter ranges produced by splitting every free gap at the given points
+ * (sanitized via filterSplitPoints, so every resulting range respects
+ * MIN_CHAPTER_DURATION). Gaps without points are left untouched.
+ */
+export function splitGapsAt(
+  chapters: Chapter[],
+  points: number[],
+  duration: number,
+): { start: number; end: number }[] {
+  const pts = filterSplitPoints(points, chapters, duration);
+  const ranges: { start: number; end: number }[] = [];
+  let idx = 0;
+  for (const gap of freeGaps(chapters, duration)) {
+    let segStart = gap.start;
+    let any = false;
+    while (idx < pts.length && pts[idx] < gap.end - 1e-9) {
+      ranges.push({ start: segStart, end: pts[idx] });
+      segStart = pts[idx];
+      idx++;
+      any = true;
+    }
+    if (any) ranges.push({ start: segStart, end: gap.end });
+  }
+  return ranges;
+}
+
 /** Find a free gap of the preferred length at/after a time point. */
 export function findFreeGap(
   chapters: Chapter[],

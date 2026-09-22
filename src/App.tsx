@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from './audio/AudioEngine';
 import { computePeaks } from './audio/peaks';
+import {
+  computeWindowRms,
+  DEFAULT_MIN_SILENCE_SEC,
+  DEFAULT_SILENCE_THRESHOLD_DB,
+  SILENCE_WINDOW_SEC,
+  silencePointsFromRms,
+} from './audio/silence';
 import { Waveform } from './components/Waveform';
 import { ChapterList } from './components/ChapterList';
 import { TransportBar } from './components/TransportBar';
+import { SilencePanel } from './components/SilencePanel';
 import { useChapters } from './hooks/useChapters';
-import type { Peaks } from './types';
+import type { AudioBufferLike, Peaks } from './types';
+import { filterSplitPoints } from './utils/chapterOps';
 import { downloadFile, toJSON, toWebVTT } from './utils/export';
 import { formatTime } from './utils/time';
 
@@ -19,6 +28,7 @@ export default function App() {
 
   const [fileName, setFileName] = useState<string | null>(null);
   const [peaks, setPeaks] = useState<Peaks | null>(null);
+  const [audioBuffer, setAudioBuffer] = useState<AudioBufferLike | null>(null);
   const [duration, setDuration] = useState(0);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -26,9 +36,34 @@ export default function App() {
   const [follow, setFollow] = useState(true);
   const [decoding, setDecoding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [silenceEnabled, setSilenceEnabled] = useState(true);
+  const [thresholdDb, setThresholdDb] = useState(DEFAULT_SILENCE_THRESHOLD_DB);
+  const [minSilence, setMinSilence] = useState(DEFAULT_MIN_SILENCE_SEC);
 
   const chaptersApi = useChapters(duration);
   const { chapters, selected, selectedId, reset: resetChapters } = chaptersApi;
+
+  // silence-split suggestions: window RMS is computed once per decoded
+  // buffer; threshold/duration changes only re-run the cheap merge step.
+  const windowRms = useMemo(
+    () => (audioBuffer ? computeWindowRms(audioBuffer) : null),
+    [audioBuffer],
+  );
+  const silencePoints = useMemo(
+    () =>
+      windowRms
+        ? silencePointsFromRms(windowRms, SILENCE_WINDOW_SEC, thresholdDb, minSilence, duration)
+        : [],
+    [windowRms, thresholdDb, minSilence, duration],
+  );
+  const suggestions = useMemo(
+    () => (silenceEnabled ? filterSplitPoints(silencePoints, chapters, duration) : []),
+    [silenceEnabled, silencePoints, chapters, duration],
+  );
+
+  const applyAllSuggestions = useCallback(() => {
+    chaptersApi.applySplitPoints(suggestions);
+  }, [chaptersApi, suggestions]);
 
   // playback clock
   useEffect(() => {
@@ -54,6 +89,7 @@ export default function App() {
         const buffer = await engine.decode(file);
         resetChapters();
         setPeaks(computePeaks(buffer));
+        setAudioBuffer(buffer);
         setDuration(buffer.duration);
         setFileName(file.name);
         setPlayhead(0);
@@ -218,9 +254,20 @@ export default function App() {
             onZoom={setPxPerSec}
             onToggleFollow={() => setFollow((f) => !f)}
           />
+          <SilencePanel
+            enabled={silenceEnabled}
+            thresholdDb={thresholdDb}
+            minSilence={minSilence}
+            candidateCount={suggestions.length}
+            onToggleEnabled={() => setSilenceEnabled((v) => !v)}
+            onThresholdChange={setThresholdDb}
+            onMinSilenceChange={setMinSilence}
+            onApplyAll={applyAllSuggestions}
+          />
           <Waveform
             peaks={peaks}
             chapters={chapters}
+            suggestions={suggestions}
             selectedId={selectedId}
             playhead={playhead}
             pxPerSec={pxPerSec}

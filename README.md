@@ -1,6 +1,6 @@
 # 播客章节标注工作台 (Podcast Chapter Studio)
 
-基于 **React + TypeScript + Web Audio API** 的网页播客章节标注工具：导入本地音频后，在可缩放波形上拖拽创建、移动、调整章节区间，自动吸附邻近边界并阻止重叠，支持键盘微调、章节搜索/排序、选中片段实时预览，并导出带章节标题的 **WebVTT** 和 **JSON** 文件。
+基于 **React + TypeScript + Web Audio API** 的网页播客章节标注工具：导入本地音频后，在可缩放波形上拖拽创建、移动、调整章节区间，自动吸附邻近边界并阻止重叠，支持键盘微调、章节搜索/排序、选中片段实时预览，并导出带章节标题的 **WebVTT** 和 **JSON** 文件。内置**静音切分建议**：按 100ms 窗口做多声道 RMS 分析，在静音中点给出候选切分边界，可一键应用。
 
 ## 一键启动（Docker）
 
@@ -30,6 +30,7 @@ npm run build      # 产出 dist/
 - **调整边界**：拖拽章节左右边缘（高亮手柄）。
 - **吸附与防重叠**：拖动或调整时，边界在约 10px 内自动吸附到相邻章节边界或文件首尾；所有操作都被钳制在相邻章节之间，不会产生重叠。
 - **跳转**：单击波形空白处移动播放头。
+- **静音切分建议**：工具条下方勾选「静音切分建议」后，波形上以**橙色虚线 + 菱形标记**预览候选切分边界（区别于蓝色正式章节）。调节「阈值」（-70 ~ -20 dB）与「最短静音」（0.3 ~ 3s）会实时重新计算；候选只落在未被现有章节覆盖的空白区间，且会自动过滤任何会产生短于 0.2s 章节的边界。点击「应用全部候选」即按全部候选边界把空白区间切分为新章节，已有章节原样保留、结果不重叠。
 - **搜索 / 排序**：左侧面板按标题搜索，可按开始时间、标题或时长排序。
 - **预览**：列表项 ▶、「预览章节」按钮或快捷键 `P` 播放选中章节区间（到点自动停止）。
 
@@ -54,7 +55,9 @@ npm run build      # 产出 dist/
 ## 技术要点
 
 - 波形为自绘 Canvas：解码后预计算 200 peaks/s 的 min/max 峰值，任意缩放级别下按像素列聚合渲染，长音频也流畅。
-- 吸附 / 防重叠逻辑集中在 `src/utils/chapterOps.ts` 纯函数中（`moveChapter` / `resizeChapter` / `createChapterInGap` / `findFreeGap`），由 `scripts/test-chapterOps.ts` 覆盖。
+- 静音检测在 `src/audio/silence.ts`：复用已解码的 `AudioBuffer` 按 100ms 窗口计算多声道 RMS（任一声道有声即非静音），窗口能量只在导入时计算一次；连续低于阈值的窗口合并为静音段，满足最短时长后取中点作为候选边界，参数调整只重跑廉价的合并/过滤步骤。
+- 候选过滤与切分在 `src/utils/chapterOps.ts`：`filterSplitPoints` 仅保留空白区间内、且距空隙边缘/相邻候选 ≥ 0.2s 的点；`splitGapsAt` 按候选点把各空隙切分为不重叠的章节区间。
+- 吸附 / 防重叠逻辑集中在 `src/utils/chapterOps.ts` 纯函数中（`moveChapter` / `resizeChapter` / `createChapterInGap` / `findFreeGap`），由 `scripts/test-chapterOps.ts` 覆盖（含静音检测与切分候选）。
 - 播放基于 Web Audio API：`AudioBufferSourceNode` 支持带结束点的片段预览，播放头由 rAF 驱动。
 - Docker 为多阶段构建：`node:20-alpine` 构建 → `nginx:1.27-alpine` 托管静态文件。
 
@@ -65,10 +68,10 @@ npm run build      # 产出 dist/
 ├── docker-compose.yml      # 单服务，8080:80
 ├── nginx.conf              # SPA 回退 + 静态资源缓存
 ├── src/
-│   ├── audio/              # AudioEngine（播放/片段预览）、peaks（波形峰值）
-│   ├── components/         # Waveform / ChapterList / TransportBar
+│   ├── audio/              # AudioEngine（播放/片段预览）、peaks（波形峰值）、silence（静音检测）
+│   ├── components/         # Waveform / ChapterList / TransportBar / SilencePanel
 │   ├── hooks/useChapters.ts
-│   ├── utils/chapterOps.ts # 吸附、防重叠、空档查找（纯函数）
+│   ├── utils/chapterOps.ts # 吸附、防重叠、空档查找、切分候选过滤（纯函数）
 │   └── utils/export.ts     # WebVTT / JSON 导出
 └── scripts/test-chapterOps.ts
 ```

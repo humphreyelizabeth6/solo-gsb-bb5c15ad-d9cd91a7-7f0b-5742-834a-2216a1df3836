@@ -7,6 +7,7 @@ import {
   moveChapter,
   resizeChapter,
   sorted,
+  splitGapsAt,
 } from '../utils/chapterOps';
 
 export function useChapters(duration: number) {
@@ -72,6 +73,28 @@ export function useChapters(duration: number) {
     setChapters((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
   }, []);
 
+  /**
+   * Split the free gaps at the given points into new chapters, keeping all
+   * existing chapters. Returns the number of chapters added.
+   */
+  const applySplitPoints = useCallback(
+    (points: number[]): number => {
+      const ranges = splitGapsAt(chapters, points, duration);
+      if (ranges.length === 0) return 0;
+      setChapters((prev) => [
+        ...prev,
+        ...ranges.map((r, i) => ({
+          id: uid(),
+          title: `章节 ${prev.length + i + 1}`,
+          start: r.start,
+          end: r.end,
+        })),
+      ]);
+      return ranges.length;
+    },
+    [chapters, duration],
+  );
+
   const remove = useCallback(
     (id: string) => {
       setChapters((prev) => prev.filter((c) => c.id !== id));
@@ -103,6 +126,7 @@ export function useChapters(duration: number) {
     addChapter,
     createFromDrag,
     createAtPlayhead,
+    applySplitPoints,
     move,
     resize,
     rename,

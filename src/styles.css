@@ -157,6 +157,47 @@ button.danger:hover:not(:disabled) {
   min-width: 72px;
 }
 
+.silence-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 6px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.silence-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.silence-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.silence-field input[type='range'] {
+  width: 110px;
+}
+
+.silence-value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  min-width: 48px;
+}
+
+.silence-count {
+  color: #f0a35e;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .wave-scroll {
   overflow-x: auto;
   overflow-y: hidden;
