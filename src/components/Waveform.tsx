@@ -15,6 +15,8 @@ interface WaveformProps {
   playhead: number;
   pxPerSec: number;
   follow: boolean;
+  /** silence-split candidate boundaries (preview markers) */
+  suggestions: number[];
   onZoom: (pxPerSec: number) => void;
   onSeek: (t: number) => void;
   onSelect: (id: string | null) => void;
@@ -38,7 +40,7 @@ function niceStep(pxPerSec: number): number {
 }
 
 export function Waveform(props: WaveformProps) {
-  const { peaks, chapters, selectedId, playhead, pxPerSec, follow } = props;
+  const { peaks, chapters, selectedId, playhead, pxPerSec, follow, suggestions } = props;
   const scrollRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [viewportW, setViewportW] = useState(800);
@@ -293,6 +295,32 @@ export function Waveform(props: WaveformProps) {
       }
     }
 
+    // silence-split suggestions: dashed orange markers, distinct from chapters
+    if (suggestions.length > 0) {
+      ctx.strokeStyle = 'rgba(255, 176, 66, 0.9)';
+      ctx.fillStyle = 'rgba(255, 176, 66, 0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      for (const t of suggestions) {
+        const x = t * pxPerSec - scrollLeft;
+        if (x < 0 || x > w) continue;
+        ctx.beginPath();
+        ctx.moveTo(x, waveTop);
+        ctx.lineTo(x, waveTop + waveH);
+        ctx.stroke();
+        // flag triangle at the top of the marker
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x, waveTop);
+        ctx.lineTo(x + 8, waveTop + 5);
+        ctx.lineTo(x, waveTop + 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.setLineDash([5, 4]);
+      }
+      ctx.setLineDash([]);
+    }
+
     // ruler
     ctx.fillStyle = '#0b0e11';
     ctx.fillRect(0, 0, w, RULER_H);
@@ -333,7 +361,7 @@ export function Waveform(props: WaveformProps) {
       ctx.closePath();
       ctx.fill();
     }
-  }, [peaks, chapters, selectedId, playhead, pxPerSec, scrollLeft, viewportW, drag, duration]);
+  }, [peaks, chapters, selectedId, playhead, pxPerSec, scrollLeft, viewportW, drag, duration, suggestions]);
 
   return (
     <div

@@ -283,6 +283,61 @@ button.danger:hover:not(:disabled) {
   margin: 0 0 12px;
 }
 
+.silence-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.silence-panel h2 {
+  margin: 0;
+}
+
+.silence-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.silence-panel label.silence-toggle {
+  flex-direction: row;
+  margin-bottom: 0;
+}
+
+.silence-panel label.silence-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  margin-bottom: 0;
+}
+
+.silence-field b {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.silence-field input[type='range'] {
+  width: 100%;
+  padding: 0;
+}
+
+.silence-panel input[type='range'] {
+  padding: 0;
+}
+
+.silence-info {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .detail-panel label {
   display: flex;
   flex-direction: column;

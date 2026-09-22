@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from './audio/AudioEngine';
 import { computePeaks } from './audio/peaks';
+import {
+  RMS_WINDOW_SEC,
+  computeRmsWindows,
+  findSilenceSegments,
+  splitGapsAtBoundaries,
+  suggestSplitBoundaries,
+} from './audio/silence';
 import { Waveform } from './components/Waveform';
 import { ChapterList } from './components/ChapterList';
+import { SilencePanel } from './components/SilencePanel';
 import { TransportBar } from './components/TransportBar';
 import { useChapters } from './hooks/useChapters';
 import type { Peaks } from './types';
@@ -27,8 +35,33 @@ export default function App() {
   const [decoding, setDecoding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // silence-split suggestions
+  const [rmsWindows, setRmsWindows] = useState<Float32Array | null>(null);
+  const [silenceThresholdDb, setSilenceThresholdDb] = useState(-40);
+  const [minSilenceSec, setMinSilenceSec] = useState(0.5);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+
   const chaptersApi = useChapters(duration);
   const { chapters, selected, selectedId, reset: resetChapters } = chaptersApi;
+
+  // recompute candidates whenever params or chapters change
+  const suggestions = useMemo(() => {
+    if (!rmsWindows || duration <= 0) return [];
+    const thresholdLinear = Math.pow(10, silenceThresholdDb / 20);
+    const segments = findSilenceSegments(
+      rmsWindows,
+      RMS_WINDOW_SEC,
+      thresholdLinear,
+      minSilenceSec,
+      duration,
+    );
+    return suggestSplitBoundaries(segments, chapters, duration);
+  }, [rmsWindows, silenceThresholdDb, minSilenceSec, chapters, duration]);
+
+  const applyAllSuggestions = useCallback(() => {
+    const ranges = splitGapsAtBoundaries(chapters, suggestions, duration);
+    chaptersApi.addMany(ranges);
+  }, [chapters, suggestions, duration, chaptersApi]);
 
   // playback clock
   useEffect(() => {
@@ -54,6 +87,8 @@ export default function App() {
         const buffer = await engine.decode(file);
         resetChapters();
         setPeaks(computePeaks(buffer));
+        // reuse the decoded buffer for silence analysis (no re-decode)
+        setRmsWindows(computeRmsWindows(buffer));
         setDuration(buffer.duration);
         setFileName(file.name);
         setPlayhead(0);
@@ -225,6 +260,7 @@ export default function App() {
             playhead={playhead}
             pxPerSec={pxPerSec}
             follow={follow && playing}
+            suggestions={showSuggestions ? suggestions : []}
             onZoom={setPxPerSec}
             onSeek={seek}
             onSelect={chaptersApi.select}
@@ -246,6 +282,16 @@ export default function App() {
               onRemove={chaptersApi.remove}
             />
             <aside className="detail-panel">
+              <SilencePanel
+                thresholdDb={silenceThresholdDb}
+                minSilenceSec={minSilenceSec}
+                show={showSuggestions}
+                candidateCount={suggestions.length}
+                onThresholdDbChange={setSilenceThresholdDb}
+                onMinSilenceSecChange={setMinSilenceSec}
+                onToggleShow={() => setShowSuggestions((s) => !s)}
+                onApplyAll={applyAllSuggestions}
+              />
               {selected ? (
                 <>
                   <h2>选中章节</h2>

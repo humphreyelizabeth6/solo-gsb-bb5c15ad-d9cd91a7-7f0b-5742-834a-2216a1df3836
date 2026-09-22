@@ -26,6 +26,23 @@ export function useChapters(duration: number) {
     [],
   );
 
+  /** Append several chapters at once (used by silence-split apply). */
+  const addMany = useCallback((ranges: { start: number; end: number }[]) => {
+    if (ranges.length === 0) return;
+    setChapters((prev) => {
+      const next = [...prev];
+      ranges.forEach((r, i) => {
+        next.push({
+          id: uid(),
+          title: `章节 ${prev.length + i + 1}`,
+          start: r.start,
+          end: r.end,
+        });
+      });
+      return next;
+    });
+  }, []);
+
   /** Create from a drag range; returns new id or null if no room. */
   const createFromDrag = useCallback(
     (a: number, b: number, snapThreshold: number): string | null => {
@@ -101,6 +118,7 @@ export function useChapters(duration: number) {
     selectedId,
     select,
     addChapter,
+    addMany,
     createFromDrag,
     createAtPlayhead,
     move,
